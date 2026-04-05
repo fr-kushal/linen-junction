@@ -1,3 +1,5 @@
+const API_URL = import.meta.env.VITE_API_URL;
+
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Navbar from "./components/Navbar";
@@ -24,7 +26,7 @@ import CareArchive from "./pages/CareArchive";
 import TrackOrder from "./pages/TrackOrder";
 import OrderTrackingDetail from "./pages/OrderTrackingDetail";
 import { Product, CartItem, User, TailoringJob } from "./types";
-import { createJob } from "./api";
+import { API_URL, createJob } from "./api";
 
 const App: React.FC = () => {
   const [page, setPage] = useState<string>("home");
@@ -82,7 +84,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/orders");
+        const res = await fetch(`${API_URL}/api/orders`);
         const data = await res.json();
 
         console.log("Fetched orders:", data);

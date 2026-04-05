@@ -1,4 +1,3 @@
-// const API = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // // 🧵 CREATE JOB
 // export const createJob = async (job: any) => {
@@ -38,7 +37,8 @@
 //   if (!res.ok) throw new Error("Failed to update job");
 // };
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API =
+  import.meta.env.VITE_API_URL || "https://linen-backend.onrender.com"; // 🌐 use env variable with fallback
 
 // 🧵 CREATE JOB
 export const createJob = async (job: any) => {
