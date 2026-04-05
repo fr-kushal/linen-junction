@@ -236,7 +236,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   //       throw new Error("Update failed");
   //     }
 
-  //     
+  //
 
   //     alert("Updated ✅");
   //   } catch (err) {
@@ -1722,7 +1722,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   {order.items
                     ?.reduce(
                       (acc: number, item: any) =>
-                        acc + item.price * item.quantity,
+                        acc + item.pricePerMeter * item.quantity,
                       0,
                     )
                     .toLocaleString()}
@@ -1791,7 +1791,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             </p>
 
                             <p>Qty: {item.quantity}</p>
-                            <p>Price: ₹{item.price}</p>
+                            <p>Price: ₹{item.pricePerMeter}</p>
 
                             {item.addTailoringService && (
                               <div className="mt-1 text-gray-600">
