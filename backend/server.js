@@ -272,6 +272,9 @@ app.put("/api/products/:id", async (req, res) => {
     const { id } = req.params;
     const { name, sku, pricePerMeter, category, description } = req.body;
 
+    console.log("UPDATE ID:", id);
+    console.log("BODY:", req.body);
+
     const result = await pool.query(
       `UPDATE products 
        SET name=$1, sku=$2, pricePerMeter=$3, category=$4, description=$5
@@ -279,12 +282,15 @@ app.put("/api/products/:id", async (req, res) => {
       [name, sku, pricePerMeter, category, description, id],
     );
 
+    console.log("ROW COUNT:", result.rowCount);
+
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "Product not found" });
     }
 
     res.json({ success: true });
   } catch (err) {
+    console.error("UPDATE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
