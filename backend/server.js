@@ -2,9 +2,9 @@ const http = require("http");
 const { Server } = require("socket.io");
 const express = require("express");
 const cors = require("cors");
-const sqlite3 = require("sqlite3").verbose();
 const multer = require("multer");
 const path = require("path");
+const { Pool } = require("pg");
 
 const app = express();
 app.use(cors());
@@ -20,70 +20,73 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ================= DATABASE =================
-const db = new sqlite3.Database("./database.db", (err) => {
-  if (err) console.error(err.message);
-  else {
-    console.log("Connected to SQLite DB ✅");
-
-    // ✅ IMPORTANT FIXES
-    db.run("PRAGMA journal_mode = WAL;");
-    db.configure("busyTimeout", 5000);
-  }
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-// ================= TABLES =================
+// ================= INIT TABLES =================
+const initDB = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        sku TEXT,
+        pricePerMeter REAL,
+        category TEXT,
+        description TEXT,
+        image TEXT
+      );
+    `);
 
-// PRODUCTS
-db.run(`
-CREATE TABLE IF NOT EXISTS products (
-  id TEXT PRIMARY KEY,
-  name TEXT,
-  sku TEXT,
-  pricePerMeter REAL,
-  category TEXT,
-  description TEXT,
-  image TEXT
-)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        phone TEXT,
+        email TEXT,
+        address TEXT
+      );
+    `);
 
-// CUSTOMERS
-db.run(`
-CREATE TABLE IF NOT EXISTS customers (
-  id TEXT PRIMARY KEY,
-  name TEXT,
-  phone TEXT,
-  email TEXT,
-  address TEXT
-)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT,
+        total_amount REAL,
+        status TEXT,
+        created_at TEXT
+      );
+    `);
 
-// ORDERS
-db.run(`
-CREATE TABLE IF NOT EXISTS orders (
-  id TEXT PRIMARY KEY,
-  customer_id TEXT,
-  total_amount REAL,
-  status TEXT,
-  created_at TEXT
-)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS order_items (
+        id TEXT PRIMARY KEY,
+        order_id TEXT,
+        product_id TEXT,
+        quantity REAL,
+        price REAL
+      );
+    `);
 
-// ORDER ITEMS
-db.run(`
-CREATE TABLE IF NOT EXISTS order_items (
-  id TEXT PRIMARY KEY,
-  order_id TEXT,
-  product_id TEXT,
-  quantity REAL,
-  price REAL
-)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS tailoring (
+        id TEXT PRIMARY KEY,
+        order_id TEXT,
+        measurements TEXT,
+        style TEXT,
+        notes TEXT
+      );
+    `);
 
-// TAILORING
-db.run(`
-CREATE TABLE IF NOT EXISTS tailoring (
-  id TEXT PRIMARY KEY,
-  order_id TEXT,
-  measurements TEXT,
-  style TEXT,
-  notes TEXT
-)`);
+    console.log("PostgreSQL tables ready ✅");
+  } catch (err) {
+    console.error("DB INIT ERROR:", err);
+  }
+};
 
 // ================= SOCKET =================
 const server = http.createServer(app);
@@ -99,11 +102,8 @@ setInterval(() => {
 // ================= API =================
 
 // 🔹 ADD PRODUCT
-app.post("/api/products", upload.single("image"), (req, res) => {
+app.post("/api/products", upload.single("image"), async (req, res) => {
   try {
-    console.log("BODY:", req.body);
-    console.log("FILE:", req.file);
-
     const name = req.body.name || "";
     const sku = req.body.sku || "";
     const pricePerMeter = Number(req.body.pricePerMeter || 0);
@@ -113,45 +113,39 @@ app.post("/api/products", upload.single("image"), (req, res) => {
     const id = Date.now().toString();
     const imagePath = req.file ? `/uploads/${req.file.filename}` : "";
 
-    db.serialize(() => {
-      db.run(
-        `INSERT INTO products 
-        (id, name, sku, pricePerMeter, category, description, image)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, name, sku, pricePerMeter, category, description, imagePath],
-        function (err) {
-          if (err) {
-            console.error("DB ERROR:", err.message);
-            return res.status(500).json({ error: err.message });
-          }
+    await pool.query(
+      `INSERT INTO products 
+      (id, name, sku, pricePerMeter, category, description, image)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, name, sku, pricePerMeter, category, description, imagePath],
+    );
 
-          return res.json({ success: true });
-        },
-      );
-    });
+    res.json({ success: true });
   } catch (err) {
-    console.error("SERVER ERROR:", err);
+    console.error("PRODUCT ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 // 🔹 GET PRODUCTS
-app.get("/api/products", (req, res) => {
-  db.all("SELECT * FROM products", [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+app.get("/api/products", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM products");
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 🔹 CREATE ORDER
-app.post("/api/orders", (req, res) => {
-  const { customer, items, tailoring } = req.body;
+app.post("/api/orders", async (req, res) => {
+  try {
+    const { customer, items, tailoring } = req.body;
 
-  const orderId = Date.now().toString();
-  const customerId = Date.now().toString();
+    const orderId = Date.now().toString();
+    const customerId = Date.now().toString();
 
-  db.serialize(() => {
-    // customer
-    db.run(`INSERT INTO customers VALUES (?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT INTO customers VALUES ($1,$2,$3,$4,$5)`, [
       customerId,
       customer.name,
       customer.phone,
@@ -161,8 +155,7 @@ app.post("/api/orders", (req, res) => {
 
     const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-    // order
-    db.run(`INSERT INTO orders VALUES (?, ?, ?, ?, ?)`, [
+    await pool.query(`INSERT INTO orders VALUES ($1,$2,$3,$4,$5)`, [
       orderId,
       customerId,
       total,
@@ -170,20 +163,18 @@ app.post("/api/orders", (req, res) => {
       new Date().toISOString(),
     ]);
 
-    // items
-    items.forEach((item) => {
-      db.run(`INSERT INTO order_items VALUES (?, ?, ?, ?, ?)`, [
+    for (const item of items) {
+      await pool.query(`INSERT INTO order_items VALUES ($1,$2,$3,$4,$5)`, [
         Date.now().toString() + Math.random(),
         orderId,
         item.product_id,
         item.quantity,
         item.price,
       ]);
-    });
+    }
 
-    // tailoring
     if (tailoring) {
-      db.run(`INSERT INTO tailoring VALUES (?, ?, ?, ?, ?)`, [
+      await pool.query(`INSERT INTO tailoring VALUES ($1,$2,$3,$4,$5)`, [
         Date.now().toString(),
         orderId,
         JSON.stringify(tailoring.measurements),
@@ -193,124 +184,126 @@ app.post("/api/orders", (req, res) => {
     }
 
     res.json({ success: true });
-  });
+  } catch (err) {
+    console.error("ORDER ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// 🔹 GET ORDERS (FULL DATA)
-app.get("/api/orders", (req, res) => {
-  db.all(`SELECT * FROM orders`, [], (err, orders) => {
-    if (err) return res.status(500).json({ error: err.message });
+// 🔹 GET ORDERS
+app.get("/api/orders", async (req, res) => {
+  try {
+    const ordersRes = await pool.query("SELECT * FROM orders");
 
-    const promises = orders.map((order) => {
-      return new Promise((resolve) => {
-        db.all(
-          `SELECT * FROM order_items WHERE order_id = ?`,
+    const data = await Promise.all(
+      ordersRes.rows.map(async (order) => {
+        const items = await pool.query(
+          "SELECT * FROM order_items WHERE order_id = $1",
           [order.id],
-          (err, items) => {
-            db.get(
-              `SELECT * FROM customers WHERE id = ?`,
-              [order.customer_id],
-              (err, customer) => {
-                db.get(
-                  `SELECT * FROM tailoring WHERE order_id = ?`,
-                  [order.id],
-                  (err, tailoring) => {
-                    resolve({
-                      ...order,
-                      items,
-                      customer,
-                      tailoring: tailoring
-                        ? {
-                            ...tailoring,
-                            measurements: JSON.parse(
-                              tailoring.measurements || "{}",
-                            ),
-                          }
-                        : null,
-                    });
-                  },
-                );
-              },
-            );
-          },
         );
-      });
-    });
 
-    Promise.all(promises).then((data) => res.json(data));
-  });
+        const customer = await pool.query(
+          "SELECT * FROM customers WHERE id = $1",
+          [order.customer_id],
+        );
+
+        const tailoring = await pool.query(
+          "SELECT * FROM tailoring WHERE order_id = $1",
+          [order.id],
+        );
+
+        return {
+          ...order,
+          items: items.rows,
+          customer: customer.rows[0],
+          tailoring: tailoring.rows[0]
+            ? {
+                ...tailoring.rows[0],
+                measurements: JSON.parse(
+                  tailoring.rows[0].measurements || "{}",
+                ),
+              }
+            : null,
+        };
+      }),
+    );
+
+    res.json(data);
+  } catch (err) {
+    console.error("GET ORDERS ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 🔹 DELETE ORDER
-app.delete("/api/orders/:id", (req, res) => {
-  const { id } = req.params;
+app.delete("/api/orders/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  db.serialize(() => {
-    db.run(`DELETE FROM order_items WHERE order_id = ?`, [id]);
-    db.run(`DELETE FROM tailoring WHERE order_id = ?`, [id]);
-    db.run(`DELETE FROM orders WHERE id = ?`, [id]);
+    await pool.query("DELETE FROM order_items WHERE order_id = $1", [id]);
+    await pool.query("DELETE FROM tailoring WHERE order_id = $1", [id]);
+    await pool.query("DELETE FROM orders WHERE id = $1", [id]);
 
     res.json({ success: true });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 🔹 UPDATE STATUS
-app.put("/api/orders/:id/status", (req, res) => {
-  const { status } = req.body;
+app.put("/api/orders/:id/status", async (req, res) => {
+  try {
+    const { status } = req.body;
 
-  db.run(
-    `UPDATE orders SET status = ? WHERE id = ?`,
-    [status, req.params.id],
-    function (err) {
-      if (err) return res.status(500).json({ error: err.message });
+    await pool.query("UPDATE orders SET status = $1 WHERE id = $2", [
+      status,
+      req.params.id,
+    ]);
 
-      res.json({ success: true });
-    },
-  );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 🔹 UPDATE PRODUCT
-app.put("/api/products/:id", (req, res) => {
-  const { id } = req.params;
-  const { name, sku, pricePerMeter, category, description } = req.body;
+app.put("/api/products/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, sku, pricePerMeter, category, description } = req.body;
 
-  db.run(
-    `UPDATE products 
-     SET name = ?, sku = ?, pricePerMeter = ?, category = ?, description = ?
-     WHERE id = ?`,
-    [name, sku, pricePerMeter, category, description, id],
-    function (err) {
-      if (err) {
-        console.error("UPDATE ERROR:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
+    const result = await pool.query(
+      `UPDATE products 
+       SET name=$1, sku=$2, pricePerMeter=$3, category=$4, description=$5
+       WHERE id=$6`,
+      [name, sku, pricePerMeter, category, description, id],
+    );
 
-      if (this.changes === 0) {
-        return res.status(404).json({ error: "Product not found" });
-      }
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
 
-      res.json({ success: true });
-    },
-  );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 🔹 UPDATE TAILORING STATUS
-app.put("/api/tailoring/:orderId/status", (req, res) => {
-  const { orderId } = req.params;
-  const { status } = req.body;
+app.put("/api/tailoring/:orderId/status", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
 
-  db.run(
-    `UPDATE orders SET status = ? WHERE id = ?`,
-    [status, orderId],
-    function (err) {
-      if (err) {
-        console.error(err.message);
-        return res.status(500).json({ error: err.message });
-      }
+    await pool.query("UPDATE orders SET status = $1 WHERE id = $2", [
+      status,
+      orderId,
+    ]);
 
-      res.json({ success: true });
-    },
-  );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // 🔹 TEST
@@ -320,6 +313,8 @@ app.get("/", (req, res) => {
 
 // ================= START =================
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+
+server.listen(PORT, async () => {
   console.log(`Server running on port ${PORT} 🚀`);
+  await initDB();
 });
