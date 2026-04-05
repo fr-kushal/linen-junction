@@ -4,7 +4,7 @@ import { io } from "socket.io-client";
 import { Product, TailoringJob } from "../types";
 import TailoringProgressBar from "../components/TailoringProgressBar";
 // const socket = io(import.meta.env.VITE_API_URL || "http://localhost:3000");
-const socket = io(API_URL || "http://localhost:5000");
+const socket = io(API_URL || "hhttps://linen-backend.onrender.com");
 
 interface AdminDashboardProps {
   tailoringJobs: TailoringJob[];

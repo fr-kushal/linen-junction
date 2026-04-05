@@ -35,7 +35,7 @@ const initDB = async () => {
         id TEXT PRIMARY KEY,
         name TEXT,
         sku TEXT,
-        pricePerMeter REAL,
+        pricepermeter REAL,
         category TEXT,
         description TEXT,
         image TEXT
@@ -106,7 +106,7 @@ app.post("/api/products", upload.single("image"), async (req, res) => {
   try {
     const name = req.body.name || "";
     const sku = req.body.sku || "";
-    const pricePerMeter = Number(req.body.pricePerMeter || 0);
+    const pricepermeter = Number(req.body.pricepermeter || 0);
     const category = req.body.category || "";
     const description = req.body.description || "";
 
@@ -115,9 +115,9 @@ app.post("/api/products", upload.single("image"), async (req, res) => {
 
     await pool.query(
       `INSERT INTO products 
-      (id, name, sku, pricePerMeter, category, description, image)
+      (id, name, sku, pricepermeter, category, description, image)
       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [id, name, sku, pricePerMeter, category, description, imagePath],
+      [id, name, sku, pricepermeter, category, description, imagePath],
     );
 
     res.json({ success: true });
@@ -270,16 +270,16 @@ app.put("/api/orders/:id/status", async (req, res) => {
 app.put("/api/products/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, sku, pricePerMeter, category, description } = req.body;
+    const { name, sku, pricepermeter, category, description } = req.body;
 
     console.log("UPDATE ID:", id);
     console.log("BODY:", req.body);
 
     const result = await pool.query(
       `UPDATE products 
-       SET name=$1, sku=$2, pricePerMeter=$3, category=$4, description=$5
+       SET name=$1, sku=$2, pricepermeter=$3, category=$4, description=$5
        WHERE id=$6`,
-      [name, sku, pricePerMeter, category, description, id],
+      [name, sku, pricepermeter, category, description, id],
     );
 
     console.log("ROW COUNT:", result.rowCount);
