@@ -977,7 +977,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onChange={(e) =>
                     setSelectedProduct({
                       ...selectedProduct,
-                      clothType: e.target.value,
+                      category: e.target.value,
                     })
                   }
                   className="border p-2 w-full mb-3"
