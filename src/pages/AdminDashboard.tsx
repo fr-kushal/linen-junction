@@ -210,31 +210,64 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     "Dispatched",
   ];
 
+  // const handleUpdateProduct = async () => {
+  //   if (!selectedProduct) return;
+
+  //   try {
+  //     console.log("REAL ID:", selectedProduct.id);
+
+  //     const res = await fetch(`${API_URL}/api/products/${selectedProduct.id}`, {
+  //       method: "PUT",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //       },
+  //       body: JSON.stringify({
+  //         name: selectedProduct.name,
+  //         sku: selectedProduct.sku,
+  //         pricePerMeter: Number(selectedProduct.pricePerMeter),
+  //         category: selectedProduct.category,
+  //         description: selectedProduct.description,
+  //       }),
+  //     });
+
+  //     if (!res.ok) {
+  //       const text = await res.text();
+  //       console.error("Server says:", text);
+  //       throw new Error("Update failed");
+  //     }
+
+  //     
+
+  //     alert("Updated ✅");
+  //   } catch (err) {
+  //     console.error(err);
+  //     alert("Update failed ❌");
+  //   }
+  // };
+
   const handleUpdateProduct = async () => {
     if (!selectedProduct) return;
 
     try {
-      console.log("REAL ID:", selectedProduct.id);
-
       const res = await fetch(`${API_URL}/api/products/${selectedProduct.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(selectedProduct),
+        body: JSON.stringify({
+          name: selectedProduct.name,
+          sku: selectedProduct.sku,
+          pricePerMeter: Number(selectedProduct.pricePerMeter),
+          category: selectedProduct.category,
+          description: selectedProduct.description,
+        }),
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("Server says:", text);
-        throw new Error("Update failed");
-      }
-
-      setProducts((prev) =>
-        prev.map((p) => (p.id === selectedProduct.id ? selectedProduct : p)),
-      );
+      if (!res.ok) throw new Error("Update failed");
 
       alert("Updated ✅");
+
+      await fetchProducts(); // 🔥 IMPORTANT: refresh from DB
     } catch (err) {
       console.error(err);
       alert("Update failed ❌");
